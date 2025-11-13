@@ -165,7 +165,7 @@ class DeviceModel:
                 from datetime import datetime
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 log_data = {
-                    'Timestamp': timestamp,
+                    'datetime': timestamp,
                     'AccX': round(Ax, 3),
                     'AccY': round(Ay, 3),
                     'AccZ': round(Az, 3),

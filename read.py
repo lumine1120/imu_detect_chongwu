@@ -171,6 +171,17 @@ class DataReader:
                 self.data_queue_plot.put_nowait(data)
             except:
                 pass
+        
+        # # 分发到日志队列（如果存在）
+        # if self.log_queue:
+        #     try:
+        #         self.log_queue.put(data, block=True, timeout=0.05)
+        #     except queue.Full:
+        #         try:
+        #             self.log_queue.get_nowait()
+        #             self.log_queue.put_nowait(data)
+        #         except:
+        #             pass
 
     def _ble_data_callback(self, device_model):
         """蓝牙设备数据更新回调（可选）"""

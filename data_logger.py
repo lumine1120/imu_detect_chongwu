@@ -6,11 +6,12 @@ import csv
 import queue
 import threading
 import time
+import os
 from datetime import datetime
 
 
 class DataLogger:
-    def __init__(self, data_queue, stop_event, log_file=None):
+    def __init__(self, data_queue, stop_event, log_file=None, data_dir='data'):
         """
         初始化数据日志记录器
         
@@ -18,19 +19,27 @@ class DataLogger:
             data_queue: 数据队列
             stop_event: 停止信号
             log_file: 日志文件路径（可选，默认自动生成）
+            data_dir: 数据存储目录
         """
         self.data_queue = data_queue
         self.stop_event = stop_event
-        self.log_file = log_file
+        self.data_dir = data_dir
         self.log_file_handle = None
         self.log_writer = None
         self.log_thread = None
         self.data_count = 0
         
+        # 确保data目录存在
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
+            print(f"创建数据目录: {self.data_dir}")
+        
         # 如果未指定文件名，自动生成
-        if self.log_file is None:
+        if log_file is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.log_file = f"imu_log_{timestamp}.csv"
+            self.log_file = os.path.join(self.data_dir, f"imu_log_{timestamp}.csv")
+        else:
+            self.log_file = os.path.join(self.data_dir, log_file)
     
     def start(self):
         """启动日志记录线程"""
@@ -41,8 +50,8 @@ class DataLogger:
             
             # 写入CSV表头
             self.log_writer.writerow([
-                'Timestamp', 'AccX', 'AccY', 'AccZ', 
-                'AsX', 'AsY', 'AsZ', 
+                'datetime', 'AccX', 'AccY', 'AccZ',
+                'AsX', 'AsY', 'AsZ',
                 'AngX', 'AngY', 'AngZ'
             ])
             self.log_file_handle.flush()
@@ -69,7 +78,7 @@ class DataLogger:
                 
                 # 准备写入的数据行
                 log_row = [
-                    data.get('Timestamp', data.get('datetime', '')),
+                    data.get('datetime', ''),
                     data.get('AccX', ''),
                     data.get('AccY', ''),
                     data.get('AccZ', ''),
@@ -100,7 +109,7 @@ class DataLogger:
             try:
                 data = self.data_queue.get_nowait()
                 log_row = [
-                    data.get('Timestamp', data.get('datetime', '')),
+                    data.get('datetime', ''),
                     data.get('AccX', ''),
                     data.get('AccY', ''),
                     data.get('AccZ', ''),
@@ -144,14 +153,14 @@ if __name__ == "__main__":
     stop_event = threading.Event()
     
     # 创建日志记录器
-    logger = DataLogger(test_queue, stop_event, log_file="test_log.csv")
+    logger = DataLogger(test_queue, stop_event)
     logger_thread = logger.start()
     
     # 生成测试数据
     print("生成测试数据...")
     for i in range(100):
         data = {
-            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+            'datetime': datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
             'AccX': round(np.random.randn(), 3),
             'AccY': round(np.random.randn(), 3),
             'AccZ': round(np.random.randn(), 3),
