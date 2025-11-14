@@ -1,4 +1,5 @@
 from read import DataReader
+from recv_data_reader import RecvDataReader
 from plot import DataPlotter
 from temp2 import HeartRateDetector  # 假设temp2.py是心率检测模块
 from data_logger import DataLogger
@@ -13,16 +14,31 @@ if __name__ == "__main__":
     logging = True  # 控制是否记录日志，True为记录，False为不记录
     
     # 选择数据来源：'csv' 或 'ble'
-    source_type = 'ble'  # 切换这里选择数据源
-    source_param = 'FA:8B:D4:D0:45:04'  # 蓝牙MAC地址或CSV文件路径
+    # source_type = 'ble'  # 切换这里选择数据源
+    # source_param = 'FA:8B:D4:D0:45:04'  # 蓝牙MAC地址或CSV文件路径
     # source_type = 'csv'
     # source_param = "E:\A_work\IMU测心率\imu_data_20251110_200532.csv"
+
+    
+    # 其他配置示例：
+    # source_type = 'ble'
+    # source_param = 'FA:8B:D4:D0:45:04'
+    # 
+    source_type = 'recv'
+    source_param = 'BACC'
     
     # 创建日志队列（如果需要记录）
     log_queue = queue.Queue(maxsize=2000) if logging else None
     
-    # 初始化数据读取器
-    data_reader = DataReader(source_type, source_param, log_queue=log_queue)
+    # 根据数据源类型初始化对应的数据读取器
+    if source_type == 'recv':
+        # 使用RecvDataReader（基于recv.py的通知方式）
+        data_reader = RecvDataReader(source_param, log_queue=log_queue)
+        sample_rate = 200
+    else:
+        # 使用原有的DataReader（支持csv和ble）
+        data_reader = DataReader(source_type, source_param, log_queue=log_queue)
+    
     data_reader.start()
 
     # def monitor_queues():

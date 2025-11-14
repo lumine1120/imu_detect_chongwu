@@ -116,7 +116,7 @@ class HeartRateDetector:
         
         try:
             # 使用自相关算法计算心率
-            proc = HeartRateProcessor(self.hr_buffer[-int(self.sample_rate * 5):])
+            proc = HeartRateProcessor(self.hr_buffer[-int(self.sample_rate * 5):], sample_rate=self.sample_rate)
             proc.preprocess()
             proc.calculate_heart_rate(threshold=0.05, sampling_interval=1.0 / self.sample_rate)
             
@@ -342,7 +342,7 @@ class HeartRateProcessor:
     """
     处理心率信号：预处理、自相关与心率估计
     """
-    def __init__(self, pos_node):
+    def __init__(self, pos_node, sample_rate):
         self.pos_node = list(pos_node)
         self.pre_node = []
         self.norm_node = []
@@ -352,6 +352,7 @@ class HeartRateProcessor:
         self.current_hr = 60
         self.last_hr = 60
         self.status = "failed"
+        self.sample_rate = sample_rate
 
     def preprocess(self):
         if not any(self.pos_node):
@@ -386,12 +387,22 @@ class HeartRateProcessor:
         self.autocorrelation_result = autocorr[n-1:]
 
     def find_peak(self):
-        # 在延迟区间45~120搜索（约50~133 bpm @100Hz）
+        # 根据采样率动态计算搜索范围（心率范围: 50~133 BPM）
+        # 公式: 延迟样本数 = 采样率 * 60 / 心率
         if not  np.any(self.autocorrelation_result):
             self.max_peak = float('-inf')
             self.peak_index = None
             return
-        start, end = 45, 120
+
+        if self.sample_rate == 100:
+            start, end = 45, 120
+        elif self.sample_rate == 200:
+            start, end = 90, 240
+        else:
+            # 动态计算：心率133 BPM -> start, 心率50 BPM -> end
+            start = int(self.sample_rate * 60 / 133)
+            end = int(self.sample_rate * 60 / 50)
+
         end = min(end, len(self.autocorrelation_result) - 1)
         if end <= start:
             self.max_peak = float('-inf')
