@@ -152,6 +152,7 @@ class RecvDataReader:
                 'AccY': acc_y,
                 'AccZ': acc_z
             }
+            print(f"当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}")
             
             # 分发数据到两个专用队列
             self._distribute_data(data_dict)

@@ -116,11 +116,8 @@ class DataPlotter:
                 y_margin = (y_max - y_min) * 0.1 if y_max > y_min else 0.1
                 self.ax.set_ylim(y_min - y_margin, y_max + y_margin)
             
-            # 更新时间文本（仅在BLE模式显示）
-            if self.source_type == 'ble':
-                self.time_text.set_text(f'当前时间: {self.current_datetime}')
-            else:
-                self.time_text.set_text('')
+            # 更新时间文本（所有模式都显示）
+            self.time_text.set_text(f'当前时间: {self.current_datetime}')
             
             # 更新统计信息
             if len(self.acc_magnitude) > 0:

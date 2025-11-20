@@ -10,27 +10,17 @@ import threading
 
 
 if __name__ == "__main__":
-    sample_rate = 100  # 采样率（TCP/CSV 默认100Hz，可根据芯片发送速率调整）
+    sample_rate = 100  # 采样率100Hz
     logging = True  # 控制是否记录日志，True为记录，False为不记录
     
-    # 可选数据来源：'csv' / 'ble' / 'recv' / 'tcp'
-    # ========== 示例配置区域 ========== 
-    # 1) CSV 回放
+    # 选择数据来源：'csv' 或 'ble'
+    # source_type = 'ble'  # 切换这里选择数据源
+    # source_param = 'FA:8B:D4:D0:45:04'  # 蓝牙MAC地址
     # source_type = 'csv'
-    # source_param = r"data/imu_log_20251118_155301.csv"
-    
-    # 2) 蓝牙读取
-    # source_type = 'ble'
-    # source_param = 'FA:8B:D4:D0:45:04'
-    
-    # 3) recv 方式（原通知机制）
-    # source_type = 'recv'
-    # source_param = 'BACC'
-    
-    # 4) TCP 服务器监听（芯片作为客户端连接并发送 AccX,AccY,AccZ 行数据）
+    # source_param = r"C:\\path\\to\\your\\file.csv"  # CSV文件路径
+    # 新增: TCP 读取（作为服务器监听端口，芯片作为客户端连接）
     source_type = 'tcp'
-    source_param = '0.0.0.0:9000'  # 或者仅写 '9000'
-    # ==================================
+    source_param = '0.0.0.0:9000'  # 监听本机 9000 端口，可改为 '9000'
 
     
     # 其他配置示例：
@@ -45,10 +35,11 @@ if __name__ == "__main__":
     
     # 根据数据源类型初始化对应的数据读取器
     if source_type == 'recv':
+        # 使用RecvDataReader（基于recv.py的通知方式）
         data_reader = RecvDataReader(source_param, log_queue=log_queue)
-        sample_rate = 200  # recv 模式若速率更高可调
+        sample_rate = 200
     else:
-        # DataReader 现已支持 csv / ble / tcp
+        # 使用原有的DataReader（支持csv和ble）
         data_reader = DataReader(source_type, source_param, log_queue=log_queue)
     
     data_reader.start()

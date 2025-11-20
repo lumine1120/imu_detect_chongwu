@@ -13,15 +13,14 @@ class DataReader:
     def __init__(self, source_type, source_param, max_queue_size=2000, log_queue=None):
         """
         初始化数据读取器
-        :param source_type: 数据来源类型，'csv'、'ble' 或 'tcp'
-        :param source_param: 数据来源参数，CSV文件路径、蓝牙设备MAC地址，或 TCP 监听参数('端口' / 'host:port')
+        :param source_type: 数据来源类型，'csv' 或 'ble'
+        :param source_param: 数据来源参数，CSV文件路径或蓝牙设备MAC地址
         :param max_queue_size: 数据队列最大长度
         :param log_queue: 日志记录队列（可选，用于数据记录）
         """
         self.source_type = source_type
         self.source_param = source_param
         self.log_queue = log_queue
-        self.count_frame = 0
         
         # 仅维护两个专用队列，移除原self.data_queue
         self.data_queue_detect = queue.Queue(maxsize=max_queue_size)  # 供检测模块（temp2.py）使用
@@ -160,11 +159,13 @@ class DataReader:
         try:
             self.data_queue_detect.put(data, block=True, timeout=0.05)
         except queue.Full:
+            # 队列满时丢弃最旧数据，确保获取最新数据
             try:
                 self.data_queue_detect.get_nowait()
                 self.data_queue_detect.put_nowait(data)
             except:
                 pass
+        
         # 分发到绘图队列
         try:
             self.data_queue_plot.put(data, block=True, timeout=0.05)
@@ -174,6 +175,7 @@ class DataReader:
                 self.data_queue_plot.put_nowait(data)
             except:
                 pass
+        
         # 分发到日志队列（如果存在）
         if self.log_queue:
             try:
@@ -185,11 +187,56 @@ class DataReader:
                 except:
                     pass
 
+    def _ble_data_callback(self, device_model):
+        """蓝牙设备数据更新回调（可选）"""
+        pass
+
+    # 专用队列获取方法
+    def get_data_queue_detect(self):
+        """获取检测专用数据队列（供temp2.py使用）"""
+        return self.data_queue_detect
+
+    def get_data_queue_plot(self):
+        """获取绘图专用数据队列（供plot.py使用）"""
+        return self.data_queue_plot
+
+    def stop(self):
+        """停止数据读取并释放资源"""
+        self.stop_event.set()
+        
+        # 关闭蓝牙设备
+        if self.ble_device:
+            self.ble_device.closeDevice()
+        
+        # 等待线程结束
+        if self.read_thread and self.read_thread.is_alive():
+            self.read_thread.join(timeout=2.0)
+        
+        if self.ble_process_thread and self.ble_process_thread.is_alive():
+            self.ble_process_thread.join(timeout=2.0)
+        
+        # 清空两个队列释放资源
+        self._clear_queues()
+        
+        print("数据读取已停止")
+
+    def _clear_queues(self):
+        """清空所有专用队列"""
+        for q in [self.data_queue_detect, self.data_queue_plot]:
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                except:
+                    break
+
     # ============ TCP 读取（作为服务器等待芯片连接）============
     def _start_tcp_server(self):
         """启动 TCP 服务器，等待芯片作为客户端连接并读取数据。
-        source_param 支持："9000" 或 "0.0.0.0:9000"。
-        芯片发送格式：每行 "AccX,AccY,AccZ"，允许逗号/空格/Tab 分隔。"""
+        source_param 支持：
+          - "9000"（仅端口，监听 0.0.0.0）
+          - "0.0.0.0:9000"（显式地址:端口）
+        芯片发送格式：每行 "AccX,AccY,AccZ\n"（浮点数）。
+        """
         host = '0.0.0.0'
         port = 9000
         try:
@@ -236,6 +283,7 @@ class DataReader:
                         time.sleep(0.5)
                         continue
 
+                # 读取一行，解析三个浮点数
                 try:
                     line = client_file.readline()
                     if not line:
@@ -246,8 +294,7 @@ class DataReader:
                         client_sock = None
                         continue
                     line = line.strip()
-                    self.count_frame += 1
-                    print(f"count:{self.count_frame} timestamp: {datetime.now().strftime('%H:%M:%S.%f')[:-3]}, received: {line}")
+                    # 允许逗号/空格/制表符分隔
                     parts = [p for p in line.replace('\t', ' ').replace(',', ' ').split(' ') if p]
                     if len(parts) < 3:
                         continue
@@ -260,6 +307,7 @@ class DataReader:
                     }
                     self._distribute_data(data)
                 except ValueError:
+                    # 解析失败忽略该行
                     continue
                 except socket.timeout:
                     continue
@@ -294,48 +342,6 @@ class DataReader:
                 srv_sock.close()
             except:
                 pass
-
-    def _ble_data_callback(self, device_model):
-        """蓝牙设备数据更新回调（可选）"""
-        pass
-
-    # 专用队列获取方法
-    def get_data_queue_detect(self):
-        """获取检测专用数据队列（供temp2.py使用）"""
-        return self.data_queue_detect
-
-    def get_data_queue_plot(self):
-        """获取绘图专用数据队列（供plot.py使用）"""
-        return self.data_queue_plot
-
-    def stop(self):
-        """停止数据读取并释放资源"""
-        self.stop_event.set()
-        
-        # 关闭蓝牙设备
-        if self.ble_device:
-            self.ble_device.closeDevice()
-        
-        # 等待线程结束
-        if self.read_thread and self.read_thread.is_alive():
-            self.read_thread.join(timeout=2.0)
-        
-        if self.ble_process_thread and self.ble_process_thread.is_alive():
-            self.ble_process_thread.join(timeout=2.0)
-        
-        # 清空两个队列释放资源
-        self._clear_queues()
-        
-        print("数据读取已停止")
-
-    def _clear_queues(self):
-        """清空所有专用队列"""
-        for q in [self.data_queue_detect, self.data_queue_plot]:
-            while not q.empty():
-                try:
-                    q.get_nowait()
-                except:
-                    break
 
 
 if __name__ == "__main__":

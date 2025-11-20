@@ -172,8 +172,10 @@ class HeartRateDetector:
             self.rt_hr = int(round(np.median(self.hr_values)))
             self.hr_status = 'fallback'
 
-        return self.rt_hr
-    
+        if (len(self.hr_values) > 0):
+            return self.hr_values[-1]
+        return None
+
     def calculate_magnitude(self, accX, accY, accZ):
         """
         计算加速度的幅值
@@ -262,10 +264,10 @@ class HeartRateDetector:
                                     print(f"\n[{data['datetime']}] 心率检测:")
                                     print(f"  使用自相关算法计算心率")
                                     print(f"  实时心率: {heart_rate} BPM")
-                                    print(f"  心率状态: {self.hr_status}")
-                                    print(f"  有效测量次数: {len(self.hr_values)}")
-                                    print(f"  数据点数: {self.data_count}")
-                                    print(f"  模拟时间: {self.total_data_count/self.sample_rate:.1f}秒")
+                                    # print(f"  心率状态: {self.hr_status}")
+                                    # print(f"  有效测量次数: {len(self.hr_values)}")
+                                    # print(f"  数据点数: {self.data_count}")
+                                    # print(f"  模拟时间: {self.total_data_count/self.sample_rate:.1f}秒")
                                     
                                     # 显示心率趋势
                                     # if len(self.heart_rate_history) >= 5:
