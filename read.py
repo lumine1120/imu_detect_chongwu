@@ -10,7 +10,7 @@ import socket
 
 
 class DataReader:
-    def __init__(self, source_type, source_param, max_queue_size=2000, log_queue=None):
+    def __init__(self, source_type, source_param, max_queue_size=2000, log_queue=None, enable_plot_queue: bool = True):
         """
         初始化数据读取器
         :param source_type: 数据来源类型，'csv'、'ble' 或 'tcp'
@@ -21,11 +21,12 @@ class DataReader:
         self.source_type = source_type
         self.source_param = source_param
         self.log_queue = log_queue
+        self.enable_plot_queue = enable_plot_queue
         self.count_frame = 0
         
         # 仅维护两个专用队列，移除原self.data_queue
-        self.data_queue_detect = queue.Queue(maxsize=max_queue_size)  # 供检测模块（temp2.py）使用
-        self.data_queue_plot = queue.Queue(maxsize=max_queue_size)    # 供绘图模块（plot.py）使用
+        self.data_queue_detect = queue.Queue(maxsize=max_queue_size)  # 供检测/算法模块使用
+        self.data_queue_plot = queue.Queue(maxsize=max_queue_size) if enable_plot_queue else None   # 供绘图模块（plot.py）使用（可禁用）
 
         self.stop_event = threading.Event()
         self.read_thread = None
@@ -64,6 +65,15 @@ class DataReader:
                         'AccY': float(row['AccY']),
                         'AccZ': float(row['AccZ'])
                     }
+                    # 追加角度列（若存在）
+                    try:
+                        data['AngX'] = float(row.get('AngX', 0))
+                        data['AngY'] = float(row.get('AngY', 0))
+                        data['AngZ'] = float(row.get('AngZ', 0))
+                    except Exception:
+                        data['AngX'] = 0.0
+                        data['AngY'] = 0.0
+                        data['AngZ'] = 0.0
                     
                     # 同时放入两个专用队列
                     self._distribute_data(data)
@@ -142,6 +152,19 @@ class DataReader:
                     'AccY': acc_data['AccY'],
                     'AccZ': acc_data['AccZ']
                 }
+                # 从设备模型中补充角度（若存在）
+                angx = self.ble_device.get('AngX')
+                angy = self.ble_device.get('AngY')
+                angz = self.ble_device.get('AngZ')
+                if angx is None:
+                    angx = 0.0
+                if angy is None:
+                    angy = 0.0
+                if angz is None:
+                    angz = 0.0
+                data['AngX'] = angx
+                data['AngY'] = angy
+                data['AngZ'] = angz
                 
                 # 分发到两个专用队列
                 self._distribute_data(data)
@@ -156,6 +179,14 @@ class DataReader:
 
     def _distribute_data(self, data):
         """将数据同时分发到两个专用队列（非阻塞模式避免阻塞）"""
+        # 统一并补齐时间戳字段
+        try:
+            ts = data.get('datetime')
+            if not ts or not isinstance(ts, str) or len(ts) < 12:
+                data['datetime'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        except Exception:
+            data['datetime'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
         # 分发到检测队列
         try:
             self.data_queue_detect.put(data, block=True, timeout=0.05)
@@ -166,14 +197,15 @@ class DataReader:
             except:
                 pass
         # 分发到绘图队列
-        try:
-            self.data_queue_plot.put(data, block=True, timeout=0.05)
-        except queue.Full:
+        if self.data_queue_plot is not None:
             try:
-                self.data_queue_plot.get_nowait()
-                self.data_queue_plot.put_nowait(data)
-            except:
-                pass
+                self.data_queue_plot.put(data, block=True, timeout=0.05)
+            except queue.Full:
+                try:
+                    self.data_queue_plot.get_nowait()
+                    self.data_queue_plot.put_nowait(data)
+                except:
+                    pass
         # 分发到日志队列（如果存在）
         if self.log_queue:
             try:
@@ -187,11 +219,14 @@ class DataReader:
 
     # ============ TCP 读取（作为服务器等待芯片连接）============
     def _start_tcp_server(self):
-        """启动 TCP 服务器，等待芯片作为客户端连接并读取数据。
-        source_param 支持："9000" 或 "0.0.0.0:9000"。
-        芯片发送格式：每行 "AccX,AccY,AccZ"，允许逗号/空格/Tab 分隔。"""
+        """TCP服务器读取芯片数据。
+        支持帧格式：
+          3列  AccX,AccY,AccZ
+          6列  AccX,AccY,AccZ,GyroX,GyroY,GyroZ
+          9列  AccX,AccY,AccZ,GyroX,GyroY,GyroZ,Roll,Pitch,Yaw
+        分隔：逗号/空格/Tab 任意。"""
         host = '0.0.0.0'
-        port = 9000
+        port = 1122
         try:
             param = str(self.source_param).strip()
             if ':' in param:
@@ -247,17 +282,48 @@ class DataReader:
                         continue
                     line = line.strip()
                     self.count_frame += 1
-                    print(f"count:{self.count_frame} timestamp: {datetime.now().strftime('%H:%M:%S.%f')[:-3]}, received: {line}")
                     parts = [p for p in line.replace('\t', ' ').replace(',', ' ').split(' ') if p]
                     if len(parts) < 3:
                         continue
                     ax, ay, az = float(parts[0]), float(parts[1]), float(parts[2])
+                    gx = gy = gz = None
+                    roll = pitch = yaw = None
+                    if len(parts) >= 6:
+                        gx, gy, gz = float(parts[3]), float(parts[4]), float(parts[5])
+                    if len(parts) >= 9:
+                        roll, pitch, yaw = float(parts[6]), float(parts[7]), float(parts[8])
+                    ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+                    if gx is not None and roll is not None:
+                        print(f"count:{self.count_frame} ts:{ts} Acc=({ax:.5f},{ay:.5f},{az:.5f}) Gyro=({gx:.5f},{gy:.5f},{gz:.5f}) RPY=({roll:.2f},{pitch:.2f},{yaw:.2f})")
+                    elif gx is not None:
+                        print(f"count:{self.count_frame} ts:{ts} Acc=({ax:.5f},{ay:.5f},{az:.5f}) Gyro=({gx:.5f},{gy:.5f},{gz:.5f})")
+                    else:
+                        print(f"count:{self.count_frame} ts:{ts} Acc=({ax:.5f},{ay:.5f},{az:.5f})")
+
                     data = {
                         'datetime': datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
                         'AccX': ax,
                         'AccY': ay,
                         'AccZ': az
                     }
+                    if gx is not None:
+                        data['GyroX'] = gx
+                        data['GyroY'] = gy
+                        data['GyroZ'] = gz
+                    if roll is not None:
+                        data['Roll'] = roll
+                        data['Pitch'] = pitch
+                        data['Yaw'] = yaw
+                        # 映射到统一的角度字段供绘图使用
+                        data['AngX'] = roll
+                        data['AngY'] = pitch
+                        data['AngZ'] = yaw
+                    else:
+                        # 若无姿态信息，提供默认0值，保证绘图通用
+                        data.setdefault('AngX', 0.0)
+                        data.setdefault('AngY', 0.0)
+                        data.setdefault('AngZ', 0.0)
+                        print(data)
                     self._distribute_data(data)
                 except ValueError:
                     continue

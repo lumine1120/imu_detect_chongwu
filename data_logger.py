@@ -52,7 +52,9 @@ class DataLogger:
             self.log_writer.writerow([
                 'datetime', 'AccX', 'AccY', 'AccZ',
                 'AsX', 'AsY', 'AsZ',
-                'AngX', 'AngY', 'AngZ'
+                'AngX', 'AngY', 'AngZ',  # 原角度/可复用
+                'GyroX', 'GyroY', 'GyroZ',
+                'Roll', 'Pitch', 'Yaw'
             ])
             self.log_file_handle.flush()
             
@@ -87,7 +89,13 @@ class DataLogger:
                     data.get('AsZ', ''),
                     data.get('AngX', ''),
                     data.get('AngY', ''),
-                    data.get('AngZ', '')
+                    data.get('AngZ', ''),
+                    data.get('GyroX', ''),
+                    data.get('GyroY', ''),
+                    data.get('GyroZ', ''),
+                    data.get('Roll', ''),
+                    data.get('Pitch', ''),
+                    data.get('Yaw', '')
                 ]
                 
                 # 写入CSV文件
@@ -118,7 +126,13 @@ class DataLogger:
                     data.get('AsZ', ''),
                     data.get('AngX', ''),
                     data.get('AngY', ''),
-                    data.get('AngZ', '')
+                    data.get('AngZ', ''),
+                    data.get('GyroX', ''),
+                    data.get('GyroY', ''),
+                    data.get('GyroZ', ''),
+                    data.get('Roll', ''),
+                    data.get('Pitch', ''),
+                    data.get('Yaw', '')
                 ]
                 if self.log_writer:
                     self.log_writer.writerow(log_row)
