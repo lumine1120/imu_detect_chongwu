@@ -118,7 +118,7 @@ class HeartRateDetector:
             # 使用自相关算法计算心率
             proc = HeartRateProcessor(self.hr_buffer[-int(self.sample_rate * 5):], sample_rate=self.sample_rate)
             proc.preprocess()
-            proc.calculate_heart_rate(threshold=0.05, sampling_interval=1.0 / self.sample_rate)
+            proc.calculate_heart_rate(threshold=0.02, sampling_interval=1.0 / self.sample_rate)
             
             if proc.status == 'succeeded' and 35 <= proc.current_hr <= 200:
                 current_hr = int(round(proc.current_hr))
@@ -172,9 +172,10 @@ class HeartRateDetector:
             self.rt_hr = int(round(np.median(self.hr_values)))
             self.hr_status = 'fallback'
 
-        if (len(self.hr_values) > 0):
-            return self.hr_values[-1]
-        return None
+        # if (len(self.hr_values) > 0):
+        #     return self.hr_values[-1]
+        return self.rt_hr
+
 
     def calculate_magnitude(self, accX, accY, accZ):
         """

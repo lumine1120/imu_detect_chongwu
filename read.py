@@ -293,12 +293,12 @@ class DataReader:
                     if len(parts) >= 9:
                         roll, pitch, yaw = float(parts[6]), float(parts[7]), float(parts[8])
                     ts = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-                    if gx is not None and roll is not None:
-                        print(f"count:{self.count_frame} ts:{ts} Acc=({ax:.5f},{ay:.5f},{az:.5f}) Gyro=({gx:.5f},{gy:.5f},{gz:.5f}) RPY=({roll:.2f},{pitch:.2f},{yaw:.2f})")
-                    elif gx is not None:
-                        print(f"count:{self.count_frame} ts:{ts} Acc=({ax:.5f},{ay:.5f},{az:.5f}) Gyro=({gx:.5f},{gy:.5f},{gz:.5f})")
-                    else:
-                        print(f"count:{self.count_frame} ts:{ts} Acc=({ax:.5f},{ay:.5f},{az:.5f})")
+                    # if gx is not None and roll is not None:
+                    #     print(f"count:{self.count_frame} ts:{ts} Acc=({ax:.5f},{ay:.5f},{az:.5f}) Gyro=({gx:.5f},{gy:.5f},{gz:.5f}) RPY=({roll:.2f},{pitch:.2f},{yaw:.2f})")
+                    # elif gx is not None:
+                    #     print(f"count:{self.count_frame} ts:{ts} Acc=({ax:.5f},{ay:.5f},{az:.5f}) Gyro=({gx:.5f},{gy:.5f},{gz:.5f})")
+                    # else:
+                    #     print(f"count:{self.count_frame} ts:{ts} Acc=({ax:.5f},{ay:.5f},{az:.5f})")
 
                     data = {
                         'datetime': datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
@@ -323,7 +323,7 @@ class DataReader:
                         data.setdefault('AngX', 0.0)
                         data.setdefault('AngY', 0.0)
                         data.setdefault('AngZ', 0.0)
-                        print(data)
+                        # print(data)
                     self._distribute_data(data)
                 except ValueError:
                     continue

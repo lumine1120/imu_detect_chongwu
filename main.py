@@ -10,8 +10,8 @@ import queue
 import threading
 
 # 各来源的参数常量
-CSV_FILE = r"E:\A_work\IMU测心率\imu最新版20251120\呼吸算法开发\data\test_1127_1.csv"
-CSV_FILE_ALT = r"E:\A_work\IMU测心率\imu最新版20251120\运行版本1\data\imu_log_20251124_142040.csv"  # 可切换备用
+CSV_FILE = r"/Users/lumine/code/chongwu/呼吸算法开发/data/imu_log_20251128_152724_test.csv"
+CSV_FILE_ALT = r"/Users/lumine/code/chongwu/呼吸算法开发/data/imu_log_20251128_152724_test.csv"  # 可切换备用
 BLE_ADDRESS = 'FA:8B:D4:D0:45:04'
 RECV_PARAM = 'BACC'
 TCP_PARAM = '0.0.0.0:1122'  # 或端口 '9000'
@@ -122,10 +122,10 @@ def run_breath_detector(source_type: str, logging: bool = True, sample_rate: int
         data_queue=data_reader.get_data_queue_detect(),
         stop_event=data_reader.stop_event,
         sample_rate=sample_rate,
-        max_points=1000,
-        smooth_window=25,
+        max_points=500,
+        smooth_window=50,
         slope_window=10,
-        peak_search_radius=30,
+        peak_search_radius=60,
     )
 
     data_logger = None
@@ -206,7 +206,7 @@ def run_breath_detector_v2(source_type: str, logging: bool = True, sample_rate: 
 if __name__ == "__main__":
     # plt_model 1: 仅总加速度; 2: 总加速度+AngX; 3: 总加速度+AngY; 4: 总加速度+AngZ; 5: 总加速度+AngX+AngY+AngZ
     # 示例调用: CSV 回放 + 四图 (model=5)
-    run(source_type='tcp', plt_model=1, logging=True, sample_rate=100)
+    # run(source_type='tcp', plt_model=1, logging=True, sample_rate=100)
     # 示例调用：使用 BreathDetector（CSV 回放，不记录日志）
-    # run_breath_detector(source_type='csv', logging=False, sample_rate=100)
+    run_breath_detector(source_type='csv', logging=True, sample_rate=100)
 
