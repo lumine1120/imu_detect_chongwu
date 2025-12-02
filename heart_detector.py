@@ -11,7 +11,7 @@ import time
 
 
 class HeartRateDetector:
-    def __init__(self, data_queue, stop_event, sample_rate=100, window_size=10):
+    def __init__(self, data_queue, stop_event, sample_rate=100, window_size=10, heart_rate_queue=None):
         """
         初始化心率检测器
         
@@ -20,12 +20,14 @@ class HeartRateDetector:
             stop_event: 停止信号
             sample_rate: 采样率(Hz)，默认100
             window_size: 计算心率的时间窗口(秒)，默认10秒
+            heart_rate_queue: 心率结果队列(可选)
         """
         self.data_queue = data_queue
         self.stop_event = stop_event
         self.sample_rate = sample_rate
         self.window_size = window_size
         self.last_print_time = time.time()
+        self.heart_rate_queue = heart_rate_queue
         # self.plot_queue=plot_queue
         # 缓存数据用于峰值检测
         self.buffer_size = sample_rate * window_size
@@ -126,10 +128,25 @@ class HeartRateDetector:
         except Exception as e:
             print(f"自相关心率计算错误: {e}")
         
-        # 只有在成功计算时才添加到hr_values
+        # 只有在成功计算时才添加到hr_values并推送到队列
         if success:
             self.hr_values.append(current_hr)
             print(f"[HR计算] 成功计算心率: {current_hr} BPM")
+            
+            # 推送心率到队列（带时间戳，毫秒级）
+            if self.heart_rate_queue is not None:
+                try:
+                    timestamp_ms = int(time.time() * 1000)
+                    heart_data = {
+                        "heart_value": current_hr,
+                        "timestamp": timestamp_ms
+                    }
+                    self.heart_rate_queue.put_nowait(heart_data)
+                    print(f"[HR队列] 心率数据已推送: {current_hr} BPM, 时间戳: {timestamp_ms}")
+                except queue.Full:
+                    print(f"[HR队列] 队列已满，丢弃数据")
+                except Exception as e:
+                    print(f"[HR队列] 推送失败: {e}")
         else:
             print(f"[HR计算] 心率计算失败，放弃本次结果, {proc.current_hr}")
             return self.rt_hr
@@ -265,23 +282,6 @@ class HeartRateDetector:
                                     print(f"\n[{data['datetime']}] 心率检测:")
                                     print(f"  使用自相关算法计算心率")
                                     print(f"  实时心率: {heart_rate} BPM")
-                                    # print(f"  心率状态: {self.hr_status}")
-                                    # print(f"  有效测量次数: {len(self.hr_values)}")
-                                    # print(f"  数据点数: {self.data_count}")
-                                    # print(f"  模拟时间: {self.total_data_count/self.sample_rate:.1f}秒")
-                                    
-                                    # 显示心率趋势
-                                    # if len(self.heart_rate_history) >= 5:
-                                    #     recent_hrs = list(self.heart_rate_history)[-5:]
-                                    #     hr_std = np.std(recent_hrs)
-                                    #     print(f"  心率稳定性: {hr_std:.2f} (标准差)")
-                                        
-                                    #     if hr_std < 2:
-                                    #         print(f"  状态: 稳定 ✓")
-                                    #     elif hr_std < 5:
-                                    #         print(f"  状态: 轻微波动 ~")
-                                    #     else:
-                                    #         print(f"  状态: 波动较大 !")
                                     
                                     print("-" * 60)
                                     self.last_print_time = current_time

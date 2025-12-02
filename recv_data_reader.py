@@ -35,9 +35,11 @@ class RecvDataReader:
         self.log_queue = log_queue
         self.max_queue_size = max_queue_size
         
-        # 创建两个专用队列，与read.py保持一致
-        self.data_queue_detect = queue.Queue(maxsize=max_queue_size)  # 供检测模块使用
+        # 创建四个专用队列，与read.py保持一致
+        self.data_queue_detect = queue.Queue(maxsize=max_queue_size)  # 供通用检测模块使用
         self.data_queue_plot = queue.Queue(maxsize=max_queue_size)    # 供绘图模块使用
+        self.data_queue_heart = queue.Queue(maxsize=max_queue_size)   # 供心率检测专用
+        self.data_queue_breath = queue.Queue(maxsize=max_queue_size)  # 供呼吸检测专用
         
         self.stop_event = threading.Event()
         self.read_thread = None
@@ -213,42 +215,47 @@ class RecvDataReader:
     
     def _distribute_data(self, data):
         """
-        将数据同时分发到两个专用队列（与read.py保持一致）
+        将数据同时分发到所有专用队列（与read.py保持一致）
+        队列满时自动丢弃最旧的数据，保证队列始终接收最新数据
         
         Args:
             data: 数据字典，包含datetime, AccX, AccY, AccZ
         """
         # 分发到检测队列
         try:
-            self.data_queue_detect.put(data, block=True, timeout=0.05)
+            self.data_queue_detect.put_nowait(data)
         except queue.Full:
-            # 队列满时丢弃最旧数据，确保获取最新数据
-            try:
-                self.data_queue_detect.get_nowait()
-                self.data_queue_detect.put_nowait(data)
-            except:
-                pass
+            self.data_queue_detect.get_nowait()  # 丢弃最旧数据
+            self.data_queue_detect.put_nowait(data)  # 放入新数据
+        
+        # 分发到心率检测队列
+        try:
+            self.data_queue_heart.put_nowait(data)
+        except queue.Full:
+            self.data_queue_heart.get_nowait()  # 丢弃最旧数据
+            self.data_queue_heart.put_nowait(data)  # 放入新数据
+        
+        # 分发到呼吸检测队列
+        try:
+            self.data_queue_breath.put_nowait(data)
+        except queue.Full:
+            self.data_queue_breath.get_nowait()  # 丢弃最旧数据
+            self.data_queue_breath.put_nowait(data)  # 放入新数据
         
         # 分发到绘图队列
         try:
-            self.data_queue_plot.put(data, block=True, timeout=0.05)
+            self.data_queue_plot.put_nowait(data)
         except queue.Full:
-            try:
-                self.data_queue_plot.get_nowait()
-                self.data_queue_plot.put_nowait(data)
-            except:
-                pass
+            self.data_queue_plot.get_nowait()  # 丢弃最旧数据
+            self.data_queue_plot.put_nowait(data)  # 放入新数据
         
         # 分发到日志队列（如果存在）
         if self.log_queue:
             try:
-                self.log_queue.put(data, block=True, timeout=0.05)
+                self.log_queue.put_nowait(data)
             except queue.Full:
-                try:
-                    self.log_queue.get_nowait()
-                    self.log_queue.put_nowait(data)
-                except:
-                    pass
+                self.log_queue.get_nowait()  # 丢弃最旧数据
+                self.log_queue.put_nowait(data)  # 放入新数据
     
     def get_data_queue_detect(self):
         """获取检测专用数据队列（供temp2.py使用）"""
@@ -257,6 +264,14 @@ class RecvDataReader:
     def get_data_queue_plot(self):
         """获取绘图专用数据队列（供plot.py使用）"""
         return self.data_queue_plot
+    
+    def get_data_queue_heart(self):
+        """获取心率检测专用数据队列"""
+        return self.data_queue_heart
+    
+    def get_data_queue_breath(self):
+        """获取呼吸检测专用数据队列"""
+        return self.data_queue_breath
     
     def stop(self):
         """停止数据读取并释放资源"""

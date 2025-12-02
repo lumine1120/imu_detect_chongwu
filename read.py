@@ -24,9 +24,11 @@ class DataReader:
         self.enable_plot_queue = enable_plot_queue
         self.count_frame = 0
         
-        # 仅维护两个专用队列，移除原self.data_queue
-        self.data_queue_detect = queue.Queue(maxsize=max_queue_size)  # 供检测/算法模块使用
+        # 维护四个专用队列：检测、绘图、心率、呼吸
+        self.data_queue_detect = queue.Queue(maxsize=max_queue_size)  # 供通用检测/算法模块使用
         self.data_queue_plot = queue.Queue(maxsize=max_queue_size) if enable_plot_queue else None   # 供绘图模块（plot.py）使用（可禁用）
+        self.data_queue_heart = queue.Queue(maxsize=max_queue_size)  # 供心率检测专用
+        self.data_queue_breath = queue.Queue(maxsize=max_queue_size)  # 供呼吸检测专用
 
         self.stop_event = threading.Event()
         self.read_thread = None
@@ -178,7 +180,7 @@ class DataReader:
         print("蓝牙数据处理线程结束")
 
     def _distribute_data(self, data):
-        """将数据同时分发到两个专用队列（非阻塞模式避免阻塞）"""
+        """将数据同时分发到所有专用队列，队列满时自动丢弃最旧数据"""
         # 统一并补齐时间戳字段
         try:
             ts = data.get('datetime')
@@ -189,33 +191,40 @@ class DataReader:
 
         # 分发到检测队列
         try:
-            self.data_queue_detect.put(data, block=True, timeout=0.05)
+            self.data_queue_detect.put_nowait(data)
         except queue.Full:
-            try:
-                self.data_queue_detect.get_nowait()
-                self.data_queue_detect.put_nowait(data)
-            except:
-                pass
+            self.data_queue_detect.get_nowait()  # 丢弃最旧数据
+            self.data_queue_detect.put_nowait(data)  # 放入新数据
+        
+        # 分发到心率检测队列
+        try:
+            self.data_queue_heart.put_nowait(data)
+        except queue.Full:
+            self.data_queue_heart.get_nowait()  # 丢弃最旧数据
+            self.data_queue_heart.put_nowait(data)  # 放入新数据
+        
+        # 分发到呼吸检测队列
+        try:
+            self.data_queue_breath.put_nowait(data)
+        except queue.Full:
+            self.data_queue_breath.get_nowait()  # 丢弃最旧数据
+            self.data_queue_breath.put_nowait(data)  # 放入新数据
+        
         # 分发到绘图队列
         if self.data_queue_plot is not None:
             try:
-                self.data_queue_plot.put(data, block=True, timeout=0.05)
+                self.data_queue_plot.put_nowait(data)
             except queue.Full:
-                try:
-                    self.data_queue_plot.get_nowait()
-                    self.data_queue_plot.put_nowait(data)
-                except:
-                    pass
+                self.data_queue_plot.get_nowait()  # 丢弃最旧数据
+                self.data_queue_plot.put_nowait(data)  # 放入新数据
+        
         # 分发到日志队列（如果存在）
         if self.log_queue:
             try:
-                self.log_queue.put(data, block=True, timeout=0.05)
+                self.log_queue.put_nowait(data)
             except queue.Full:
-                try:
-                    self.log_queue.get_nowait()
-                    self.log_queue.put_nowait(data)
-                except:
-                    pass
+                self.log_queue.get_nowait()  # 丢弃最旧数据
+                self.log_queue.put_nowait(data)  # 放入新数据
 
     # ============ TCP 读取（作为服务器等待芯片连接）============
     def _start_tcp_server(self):
@@ -373,6 +382,14 @@ class DataReader:
     def get_data_queue_plot(self):
         """获取绘图专用数据队列（供plot.py使用）"""
         return self.data_queue_plot
+    
+    def get_data_queue_heart(self):
+        """获取心率检测专用数据队列"""
+        return self.data_queue_heart
+    
+    def get_data_queue_breath(self):
+        """获取呼吸检测专用数据队列"""
+        return self.data_queue_breath
 
     def stop(self):
         """停止数据读取并释放资源"""

@@ -1,10 +1,10 @@
 from read import DataReader
 from recv_data_reader import RecvDataReader
 from plot import DataPlotter
-from breathTest_detector import BreathDetector
-from breathTets_detector2 import BreathDetector as BreathDetectorV2
-from temp2 import HeartRateDetector  # 假设temp2.py是心率检测模块
+from breath_detector import BreathDetector
+from heart_detector import HeartRateDetector  # 假设temp2.py是心率检测模块
 from data_logger import DataLogger
+from result_monitor import ResultMonitor
 import time
 import queue
 import threading
@@ -15,6 +15,14 @@ CSV_FILE_ALT = r"/Users/lumine/code/chongwu/呼吸算法开发/data/imu_log_2025
 BLE_ADDRESS = 'FA:8B:D4:D0:45:04'
 RECV_PARAM = 'BACC'
 TCP_PARAM = '0.0.0.0:1122'  # 或端口 '9000'
+
+# 数据上传URL配置（可选，设置为None则不上传）
+
+# HEART_UPLOAD_URL = "http://localhost:8000/api/heart"
+# BREATH_UPLOAD_URL = "http://localhost:8000/api/breath"
+HEART_UPLOAD_URL = "https://api.qyrix.3drx.top/upload/stats/heartrate"
+BREATH_UPLOAD_URL = "https://api.qyrix.3drx.top/upload/stats/breath"
+UPLOAD_INTERVAL = 60  # 上传间隔（秒）
 
 def run(source_type: str, plt_model: int, logging: bool=True ,sample_rate: int=100):
     """
@@ -146,12 +154,19 @@ def run_breath_detector(source_type: str, logging: bool = True, sample_rate: int
         if logger_thread:
             logger_thread.join()
 
-def run_breath_detector_v2(source_type: str, logging: bool = True, sample_rate: int = 100):
+
+def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: int = 100):
     """
-    使用新版 BreathDetectorV2（breathTets_detector2.py）进行呼吸检测与绘图：
-    - 仅消费 DataReader 的 data_queue_detect
-    - 禁用 DataReader 的绘图队列创建（enable_plot_queue=False）
-    - 时间轴使用数据时间戳，显示峰谷与呼吸率
+    同时检测心率和呼吸：
+    - 心率: 基于总加速度 (使用 HeartRateDetector)
+    - 呼吸: 基于角度X (使用 BreathDetector)
+    - 实时绘制呼吸图表
+    - 将检测结果推送到队列并打印
+    
+    参数:
+        source_type: 'csv' | 'ble' | 'recv' | 'tcp'
+        logging: 是否记录数据日志
+        sample_rate: 采样率
     """
     # 选择参数
     if source_type == 'csv':
@@ -168,7 +183,10 @@ def run_breath_detector_v2(source_type: str, logging: bool = True, sample_rate: 
         raise ValueError(f"不支持的 source_type: {source_type}")
 
     log_queue = queue.Queue(maxsize=2000) if logging else None
+    heart_rate_queue = queue.Queue(maxsize=1000)
+    breath_rate_queue = queue.Queue(maxsize=1000)
 
+    # 创建数据读取器
     if source_type == 'recv':
         data_reader = RecvDataReader(source_param, log_queue=log_queue)
     else:
@@ -176,15 +194,39 @@ def run_breath_detector_v2(source_type: str, logging: bool = True, sample_rate: 
 
     data_reader.start()
 
-    breath_detector = BreathDetectorV2(
-        data_queue_detect=data_reader.get_data_queue_detect(),
+    # 创建心率检测器 (后台线程运行，使用独立的心率队列)
+    heart_detector = HeartRateDetector(
+        data_queue=data_reader.get_data_queue_heart(),
         stop_event=data_reader.stop_event,
         sample_rate=sample_rate,
-        max_points=1000,
-        smooth_window=25,
+        heart_rate_queue=heart_rate_queue
+    )
+    heart_thread = heart_detector.start()
+
+    # 创建呼吸检测器 (主线程运行并绘图，使用独立的呼吸队列)
+    breath_detector = BreathDetector(
+        data_queue=data_reader.get_data_queue_breath(),
+        stop_event=data_reader.stop_event,
+        sample_rate=sample_rate,
+        max_points=500,
+        smooth_window=50,
         slope_window=10,
+        peak_search_radius=60,
+        breath_rate_queue=breath_rate_queue,
     )
 
+    # 创建结果监控器（带网络上传功能）
+    result_monitor = ResultMonitor(
+        heart_rate_queue=heart_rate_queue,
+        breath_rate_queue=breath_rate_queue,
+        stop_event=data_reader.stop_event,
+        heart_upload_url=HEART_UPLOAD_URL,
+        breath_upload_url=BREATH_UPLOAD_URL,
+        upload_interval=UPLOAD_INTERVAL
+    )
+    monitor_thread = result_monitor.start()
+
+    # 创建数据记录器
     data_logger = None
     logger_thread = None
     if logging:
@@ -197,16 +239,21 @@ def run_breath_detector_v2(source_type: str, logging: bool = True, sample_rate: 
     try:
         breath_detector.start()  # 阻塞直到窗口关闭或被中断
     except KeyboardInterrupt:
-        print("用户中断程序")
+        print("\n用户中断程序")
     finally:
         data_reader.stop()
+        heart_thread.join()
+        monitor_thread.join()
         if logger_thread:
             logger_thread.join()
+
 
 if __name__ == "__main__":
     # plt_model 1: 仅总加速度; 2: 总加速度+AngX; 3: 总加速度+AngY; 4: 总加速度+AngZ; 5: 总加速度+AngX+AngY+AngZ
     # 示例调用: CSV 回放 + 四图 (model=5)
     # run(source_type='tcp', plt_model=1, logging=True, sample_rate=100)
     # 示例调用：使用 BreathDetector（CSV 回放，不记录日志）
-    run_breath_detector(source_type='csv', logging=True, sample_rate=100)
+    # run_breath_detector(source_type='csv', logging=True, sample_rate=100)
+    # 示例调用：同时检测心率和呼吸
+    run_both_heart_breath(source_type='csv', logging=True, sample_rate=100)
 

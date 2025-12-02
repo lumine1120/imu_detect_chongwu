@@ -1,7 +1,7 @@
 from read import DataReader
 from recv_data_reader import RecvDataReader
 from plot import DataPlotter
-from temp2 import HeartRateDetector  # 假设temp2.py是心率检测模块
+from heart_detector import HeartRateDetector  # 假设temp2.py是心率检测模块
 from data_logger import DataLogger
 import time
 import queue
