@@ -24,11 +24,12 @@ class DataReader:
         self.enable_plot_queue = enable_plot_queue
         self.count_frame = 0
         
-        # 维护四个专用队列：检测、绘图、心率、呼吸
+        # 维护五个专用队列：检测、绘图、心率、呼吸、行为
         self.data_queue_detect = queue.Queue(maxsize=max_queue_size)  # 供通用检测/算法模块使用
         self.data_queue_plot = queue.Queue(maxsize=max_queue_size) if enable_plot_queue else None   # 供绘图模块（plot.py）使用（可禁用）
         self.data_queue_heart = queue.Queue(maxsize=max_queue_size)  # 供心率检测专用
         self.data_queue_breath = queue.Queue(maxsize=max_queue_size)  # 供呼吸检测专用
+        self.data_queue_action = queue.Queue(maxsize=max_queue_size)  # 供行为检测专用
 
         self.stop_event = threading.Event()
         self.read_thread = None
@@ -210,6 +211,13 @@ class DataReader:
             self.data_queue_breath.get_nowait()  # 丢弃最旧数据
             self.data_queue_breath.put_nowait(data)  # 放入新数据
         
+        # 分发到行为检测队列
+        try:
+            self.data_queue_action.put_nowait(data)
+        except queue.Full:
+            self.data_queue_action.get_nowait()  # 丢弃最旧数据
+            self.data_queue_action.put_nowait(data)  # 放入新数据
+        
         # 分发到绘图队列
         if self.data_queue_plot is not None:
             try:
@@ -390,6 +398,10 @@ class DataReader:
     def get_data_queue_breath(self):
         """获取呼吸检测专用数据队列"""
         return self.data_queue_breath
+    
+    def get_data_queue_action(self):
+        """获取行为检测专用数据队列"""
+        return self.data_queue_action
 
     def stop(self):
         """停止数据读取并释放资源"""

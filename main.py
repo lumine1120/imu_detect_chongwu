@@ -5,6 +5,7 @@ from breath_detector import BreathDetector
 from heart_detector import HeartRateDetector  # 假设temp2.py是心率检测模块
 from data_logger import DataLogger
 from result_monitor import ResultMonitor
+from action_detector import ActionDetector
 import time
 import queue
 import threading
@@ -185,6 +186,7 @@ def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: i
     log_queue = queue.Queue(maxsize=2000) if logging else None
     heart_rate_queue = queue.Queue(maxsize=1000)
     breath_rate_queue = queue.Queue(maxsize=1000)
+    action_queue = queue.Queue(maxsize=1000)
 
     # 创建数据读取器
     if source_type == 'recv':
@@ -215,14 +217,27 @@ def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: i
         breath_rate_queue=breath_rate_queue,
     )
 
-    # 创建结果监控器（带网络上传功能）
+    # 创建行为检测器 (后台线程运行，使用加速度数据)
+    action_detector = ActionDetector(
+        data_queue=data_reader.get_data_queue_action(),
+        stop_event=data_reader.stop_event,
+        action_queue=action_queue,
+        window_size=200,
+        stationary_threshold=(0.8, 1.2),
+        walking_threshold=(0.5, 2.0),
+        running_threshold=2.0
+    )
+    action_thread = action_detector.start()
+
+    # 创建结果监控器（带网络上传功能）行为检测）
     result_monitor = ResultMonitor(
         heart_rate_queue=heart_rate_queue,
         breath_rate_queue=breath_rate_queue,
         stop_event=data_reader.stop_event,
         heart_upload_url=HEART_UPLOAD_URL,
         breath_upload_url=BREATH_UPLOAD_URL,
-        upload_interval=UPLOAD_INTERVAL
+        upload_interval=UPLOAD_INTERVAL,
+        action_queue=action_queue
     )
     monitor_thread = result_monitor.start()
 
@@ -243,6 +258,7 @@ def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: i
     finally:
         data_reader.stop()
         heart_thread.join()
+        action_thread.join()
         monitor_thread.join()
         if logger_thread:
             logger_thread.join()
@@ -255,5 +271,5 @@ if __name__ == "__main__":
     # 示例调用：使用 BreathDetector（CSV 回放，不记录日志）
     # run_breath_detector(source_type='csv', logging=True, sample_rate=100)
     # 示例调用：同时检测心率和呼吸
-    run_both_heart_breath(source_type='csv', logging=True, sample_rate=100)
+    run_both_heart_breath(source_type='tcp', logging=True, sample_rate=100)
 

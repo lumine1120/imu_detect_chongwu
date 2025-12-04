@@ -24,7 +24,8 @@ class ResultMonitor:
         stop_event: threading.Event,
         heart_upload_url: Optional[str] = None,
         breath_upload_url: Optional[str] = None,
-        upload_interval: int = 20
+        upload_interval: int = 20,
+        action_queue: Optional[queue.Queue] = None
     ):
         """
         初始化结果监控器
@@ -36,9 +37,11 @@ class ResultMonitor:
             heart_upload_url: 心率数据上传URL（可选）
             breath_upload_url: 呼吸数据上传URL（可选）
             upload_interval: 上传间隔（秒），默认20秒
+            action_queue: 行为检测结果队列（包含 {"action": xx, "timestamp": xx}）（可选）
         """
         self.heart_rate_queue = heart_rate_queue
         self.breath_rate_queue = breath_rate_queue
+        self.action_queue = action_queue
         self.stop_event = stop_event
         self.heart_upload_url = heart_upload_url
         self.breath_upload_url = breath_upload_url
@@ -53,10 +56,13 @@ class ResultMonitor:
         self.latest_breath_rate = None
         self.latest_heart_timestamp = None
         self.latest_breath_timestamp = None
+        self.latest_action = None
+        self.latest_action_timestamp = None
         
         # 统计信息
         self.heart_rate_count = 0
         self.breath_rate_count = 0
+        self.action_count = 0
         self.heart_upload_count = 0
         self.breath_upload_count = 0
         self.heart_upload_failed = 0
@@ -77,10 +83,16 @@ class ResultMonitor:
                         self.latest_heart_timestamp = timestamp
                         self.heart_rate_count += 1
                         
-                        # 添加到缓存（用于上传），timestamp转换为字符串
+                        # 根据当前行为状态设置置信度：静止(1)时为1.0，其他状态为0.0
+                        # 状态值: 0=未知, 1=静止, 2=行走, 3=跑步
+                        confidence = 1.0 if self.latest_action == 1 else 0.0
+                        
+                        # 添加到缓存（用于上传），timestamp转换为毫秒时间戳
                         upload_heart_data = {
                             "value": heart_value,
-                            "timestamp": str(timestamp)
+                            "timestamp": timestamp,
+                            "source": "imu",
+                            "confidence": confidence
                         }
                         self.heart_data_cache.append(upload_heart_data)
         except queue.Empty:
@@ -99,22 +111,50 @@ class ResultMonitor:
                         self.latest_breath_timestamp = timestamp
                         self.breath_rate_count += 1
                         
-                        # 添加到缓存（用于上传），timestamp转换为字符串
+                        # 根据当前行为状态设置置信度：静止(1)时为1.0，其他状态为0.0
+                        # 状态值: 0=未知, 1=静止, 2=行走, 3=跑步
+                        confidence = 1.0 if self.latest_action == 1 else 0.0
+                        
+                        # 添加到缓存（用于上传），timestamp转换为毫秒时间戳
                         upload_breath_data = {
                             "value": breath_value,
-                            "timestamp": str(timestamp)
+                            "timestamp": timestamp,
+                            "source": "imu",
+                            "confidence": confidence
                         }
                         self.breath_data_cache.append(upload_breath_data)
         except queue.Empty:
             pass
+        
+        # 读取行为检测队列
+        # 状态值: 0=未知, 1=静止, 2=行走, 3=跑步
+        if self.action_queue:
+            try:
+                while not self.action_queue.empty():
+                    action_data = self.action_queue.get_nowait()
+                    if action_data and isinstance(action_data, dict):
+                        action = action_data.get("action")
+                        timestamp = action_data.get("timestamp")
+                        if action is not None:
+                            # 更新最新值并打印
+                            self.latest_action = action
+                            self.latest_action_timestamp = timestamp
+                            self.action_count += 1
+                            # 立即打印行为变化（转换为可读文本）
+                            action_text = {0: "未知", 1: "静止", 2: "行走", 3: "跑步"}.get(action, "未知")
+                            print(f"\n[行为检测] 时间: {timestamp} | 行为: {action_text} ({action})")
+            except queue.Empty:
+                pass
     
     def _print_status(self):
         """打印当前状态"""
         heart_str = f"{self.latest_heart_rate:.0f} bpm" if self.latest_heart_rate else "-- bpm"
         breath_str = f"{self.latest_breath_rate:.1f} bpm" if self.latest_breath_rate else "-- bpm"
+        # 状态值转换为文本: 0=未知, 1=静止, 2=行走, 3=跑步
+        action_text = {0: "未知", 1: "静止", 2: "行走", 3: "跑步"}.get(self.latest_action, "--") if self.latest_action is not None else "--"
         
-        print(f"\r[监控] 心率: {heart_str:>10} | 呼吸率: {breath_str:>10} | "
-              f"心率:{self.heart_rate_count:>3}次 | 呼吸:{self.breath_rate_count:>3}次 | "
+        print(f"\r[监控] 心率: {heart_str:>10} | 呼吸率: {breath_str:>10} | 行为: {action_text:>6} | "
+              f"心率:{self.heart_rate_count:>3}次 | 呼吸:{self.breath_rate_count:>3}次 | 行为:{self.action_count:>3}次 | "
               f"缓存:心{len(self.heart_data_cache):>2}/呼{len(self.breath_data_cache):>2} | "
               f"已上传:心{self.heart_upload_count:>2}/呼{self.breath_upload_count:>2} | "
               f"失败:心{self.heart_upload_failed:>2}/呼{self.breath_upload_failed:>2}", 
@@ -125,9 +165,9 @@ class ResultMonitor:
         if not self.heart_upload_url or len(self.heart_data_cache) == 0:
             return
         
-        # 准备上传数据
+        # 准备上传数据（使用新的JSON格式）
         upload_data = {
-            "type": "on_body",
+            "deviceState": "on_body",
             "data": self.heart_data_cache.copy()
         }
         count = len(self.heart_data_cache)
@@ -158,9 +198,9 @@ class ResultMonitor:
         if not self.breath_upload_url or len(self.breath_data_cache) == 0:
             return
         
-        # 准备上传数据
+        # 准备上传数据（使用新的JSON格式）
         upload_data = {
-            "type": "on_body",
+            "deviceState": "on_body",
             "data": self.breath_data_cache.copy()
         }
         count = len(self.breath_data_cache)
