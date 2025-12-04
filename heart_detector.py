@@ -43,7 +43,6 @@ class HeartRateDetector:
         self.hr_status = 'init'       # 心率状态
         self.hr_values = []           # 成功计算的心率值
         self.last_hr_update_count = 0  # 上次HR计算时的数据计数
-        self.last_hr_output_count = 0  # 上次HR输出时的数据计数
         self.total_data_count = 0      # 总数据计数（用于模拟时间）
         
         # 统计信息
@@ -128,25 +127,10 @@ class HeartRateDetector:
         except Exception as e:
             print(f"自相关心率计算错误: {e}")
         
-        # 只有在成功计算时才添加到hr_values并推送到队列
+        # 只有在成功计算时才添加到hr_values
         if success:
             self.hr_values.append(current_hr)
             print(f"[HR计算] 成功计算心率: {current_hr} BPM")
-            
-            # 推送心率到队列（带时间戳，毫秒级）
-            if self.heart_rate_queue is not None:
-                try:
-                    timestamp_ms = int(time.time() * 1000)
-                    heart_data = {
-                        "heart_value": current_hr,
-                        "timestamp": timestamp_ms
-                    }
-                    self.heart_rate_queue.put_nowait(heart_data)
-                    print(f"[HR队列] 心率数据已推送: {current_hr} BPM, 时间戳: {timestamp_ms}")
-                except queue.Full:
-                    print(f"[HR队列] 队列已满，丢弃数据")
-                except Exception as e:
-                    print(f"[HR队列] 推送失败: {e}")
         else:
             print(f"[HR计算] 心率计算失败，放弃本次结果, {proc.current_hr}")
             return self.rt_hr
@@ -167,12 +151,6 @@ class HeartRateDetector:
             self.hr_status = 'collecting'
             return self.rt_hr
 
-        # 5秒输出间隔检查（基于数据量）
-        if (self.total_data_count - self.last_hr_output_count) < (5 * self.sample_rate):
-            return self.rt_hr
-
-        self.last_hr_output_count = self.total_data_count
-
         # 加权平滑计算(每10秒更新输出)
         avg = np.mean(self.hr_values)
         # valid = [v for v in self.hr_values if abs(v - avg) / avg < 0.35]
@@ -188,6 +166,21 @@ class HeartRateDetector:
         else:
             self.rt_hr = int(round(np.median(self.hr_values)))
             self.hr_status = 'fallback'
+
+        # 将平滑后的心率推送到队列（每次成功计算都会推送一次）
+        if self.heart_rate_queue is not None and self.rt_hr > 0:
+            try:
+                timestamp_ms = int(time.time() * 1000)
+                heart_data = {
+                    "heart_value": int(self.rt_hr),
+                    "timestamp": timestamp_ms
+                }
+                self.heart_rate_queue.put_nowait(heart_data)
+                print(f"[HR队列] 平滑后心率已推送: {self.rt_hr} BPM, 时间戳: {timestamp_ms}")
+            except queue.Full:
+                print(f"[HR队列] 队列已满，丢弃数据")
+            except Exception as e:
+                print(f"[HR队列] 推送失败: {e}")
 
         # if (len(self.hr_values) > 0):
         #     return self.hr_values[-1]
@@ -415,7 +408,7 @@ class HeartRateProcessor:
         max_value = np.max(sub_range)
         max_index = int(np.argmax(sub_range)) + start
         self.max_peak = float(max_value)
-        self.peak_index = max_index + 1
+        self.peak_index = max_index
 
     def calculate_heart_rate(self, threshold, sampling_interval):
         # print("计算心率...")

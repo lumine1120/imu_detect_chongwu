@@ -23,7 +23,7 @@ TCP_PARAM = '0.0.0.0:1122'  # 或端口 '9000'
 # BREATH_UPLOAD_URL = "http://localhost:8000/api/breath"
 HEART_UPLOAD_URL = "https://api.qyrix.3drx.top/upload/stats/heartrate"
 BREATH_UPLOAD_URL = "https://api.qyrix.3drx.top/upload/stats/breath"
-UPLOAD_INTERVAL = 60  # 上传间隔（秒）
+UPLOAD_INTERVAL = 5  # 上传间隔（秒）
 
 def run(source_type: str, plt_model: int, logging: bool=True ,sample_rate: int=100):
     """

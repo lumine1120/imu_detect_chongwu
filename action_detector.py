@@ -36,7 +36,8 @@ class ActionDetector:
         window_size: int = 200,
         stationary_threshold: tuple = (0.8, 1.2),
         walking_threshold: tuple = (0.5, 2.0),
-        running_threshold: float = 2.0
+        running_threshold: float = 2.0,
+        confirm_frames: int = 10
     ):
         """
         初始化行为检测器
@@ -57,12 +58,18 @@ class ActionDetector:
         self.stationary_range = stationary_threshold
         self.walking_range = walking_threshold
         self.running_threshold = running_threshold
+        # 抖动过滤：状态变更需未来N帧确认
+        self.confirm_frames = max(1, int(confirm_frames))
         
         # 当前状态
         self.current_state = self.STATE_UNKNOWN
         
         # 统计信息
         self.state_change_count = 0
+
+        # 待确认的目标状态与计数
+        self._pending_state = None
+        self._pending_count = 0
         
     def _calculate_total_acceleration(self, acc_x: float, acc_y: float, acc_z: float) -> float:
         return math.sqrt(acc_x**2 + acc_y**2 + acc_z**2)
@@ -174,22 +181,42 @@ class ActionDetector:
                 min_data_points = max(5, self.window_size // 2)
                 
                 if len(recent_acc) >= min_data_points:
-                    # 分析并更新状态
-                    new_state = self._analyze_action_state(recent_acc)
-                    
-                    # 每200次数据打印一次当前行为
+                    # 分析最新状态（可能抖动）
+                    observed_state = self._analyze_action_state(recent_acc)
+
+                    # 每200次数据打印一次当前行为（观察值）
                     if data_count % 200 == 0:
-                        action_text = {0: "未知", 1: "静止", 2: "行走", 3: "跑步"}.get(new_state, "未知")
+                        action_text = {0: "未知", 1: "静止", 2: "行走", 3: "跑步"}.get(observed_state, "未知")
                         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        print(f"[行为检测] 时间: {current_time} | 当前行为: {action_text} ({new_state})")
-                    
-                    # 如果状态发生变化，推送结果
-                    if new_state != self.current_state:
-                        self.current_state = new_state
-                        self.state_change_count += 1
-                        
-                        # 推送到结果队列（使用当前时间而不是数据时间戳）
-                        self._push_action_result(new_state)
+                        print(f"[行为检测] 时间: {current_time} | 观察行为: {action_text} ({observed_state}) | 当前状态: {self.current_state}")
+
+                    # 抖动过滤逻辑：
+                    # 1) 若观察到不同于当前状态，则启动/更新待确认状态计数
+                    # 2) 若观察回到当前状态，则取消待确认
+                    # 3) 若观察到另一新状态（非待确认目标），重置待确认为该新状态
+                    # 4) 待确认计数达到阈值时，正式切换状态并入队
+
+                    if observed_state == self.current_state:
+                        # 观察回到当前状态，取消待确认
+                        self._pending_state = None
+                        self._pending_count = 0
+                    else:
+                        # 如果没有待确认，或观察到不同的目标状态，则重置待确认为该新状态
+                        if self._pending_state is None or self._pending_state != observed_state:
+                            self._pending_state = observed_state
+                            self._pending_count = 1
+                        else:
+                            # 同一待确认目标，计数+1
+                            self._pending_count += 1
+
+                        # 达到确认帧数阈值，执行状态切换与入队
+                        if self._pending_count >= self.confirm_frames:
+                            self.current_state = self._pending_state
+                            self.state_change_count += 1
+                            self._push_action_result(self.current_state)
+                            # 切换完成后清空待确认
+                            self._pending_state = None
+                            self._pending_count = 0
                         
             except queue.Empty:
                 # 队列为空，继续等待

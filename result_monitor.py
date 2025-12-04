@@ -24,8 +24,13 @@ class ResultMonitor:
         stop_event: threading.Event,
         heart_upload_url: Optional[str] = None,
         breath_upload_url: Optional[str] = None,
-        upload_interval: int = 20,
-        action_queue: Optional[queue.Queue] = None
+        upload_interval: Optional[int] = None,
+        action_queue: Optional[queue.Queue] = None,
+        # 新增：分别控制上传间隔与行为上传策略
+        heart_breath_upload_interval: int = 10,
+        action_upload_url: Optional[str] = None,
+        action_upload_mode: str = "on_event",  # 'on_event' | 'interval'
+        action_upload_interval: int = 10
     ):
         """
         初始化结果监控器
@@ -36,8 +41,12 @@ class ResultMonitor:
             stop_event: 停止信号事件
             heart_upload_url: 心率数据上传URL（可选）
             breath_upload_url: 呼吸数据上传URL（可选）
-            upload_interval: 上传间隔（秒），默认20秒
+            upload_interval: 兼容旧参数：统一上传间隔（秒）。若提供，则用于覆盖 heart_breath_upload_interval
             action_queue: 行为检测结果队列（包含 {"action": xx, "timestamp": xx}）（可选）
+            heart_breath_upload_interval: 心率/呼吸上传间隔（秒），默认10秒
+            action_upload_url: 行为上传URL（可选）
+            action_upload_mode: 行为上传模式：'on_event'（有新数据立刻上传，默认）或 'interval'（定时上传）
+            action_upload_interval: 行为定时上传间隔（秒），默认10秒
         """
         self.heart_rate_queue = heart_rate_queue
         self.breath_rate_queue = breath_rate_queue
@@ -45,11 +54,19 @@ class ResultMonitor:
         self.stop_event = stop_event
         self.heart_upload_url = heart_upload_url
         self.breath_upload_url = breath_upload_url
-        self.upload_interval = upload_interval
+        # 兼容旧的 upload_interval；若传入则覆盖心/呼吸的独立间隔
+        self.hb_upload_interval = (
+            upload_interval if upload_interval is not None else heart_breath_upload_interval
+        )
+        # 行为上传配置
+        self.action_upload_url = action_upload_url
+        self.action_upload_mode = action_upload_mode if action_upload_mode in ("on_event", "interval") else "on_event"
+        self.action_upload_interval = action_upload_interval
         
         # 本地缓存队列（用于累积数据后上传）
         self.heart_data_cache = []
         self.breath_data_cache = []
+        self.action_data_cache = []  # 行为数据缓存
         
         # 最新的检测结果（用于控制台显示）
         self.latest_heart_rate = None
@@ -65,8 +82,10 @@ class ResultMonitor:
         self.action_count = 0
         self.heart_upload_count = 0
         self.breath_upload_count = 0
+        self.action_upload_count = 0
         self.heart_upload_failed = 0
         self.breath_upload_failed = 0
+        self.action_upload_failed = 0
         
     def _read_queues(self):
         """从队列读取数据并缓存到本地"""
@@ -143,6 +162,22 @@ class ResultMonitor:
                             # 立即打印行为变化（转换为可读文本）
                             action_text = {0: "未知", 1: "静止", 2: "行走", 3: "跑步"}.get(action, "未知")
                             print(f"\n[行为检测] 时间: {timestamp} | 行为: {action_text} ({action})")
+
+                            # 根据上传模式处理行为上传
+                            if self.action_upload_url:
+                                if self.action_upload_mode == "on_event":
+                                    # 事件触发：立即上传单条（异步）
+                                    self.action_data_cache.append({
+                                        "action": int(action),
+                                        "timestamp": timestamp,
+                                    })
+                                    self._upload_action_data()
+                                else:
+                                    # 定时模式：加入缓存，按间隔统一上传
+                                    self.action_data_cache.append({
+                                        "action": int(action),
+                                        "timestamp": timestamp,
+                                    })
             except queue.Empty:
                 pass
     
@@ -233,10 +268,14 @@ class ResultMonitor:
             print(f"  心率上传URL: {self.heart_upload_url}")
         if self.breath_upload_url:
             print(f"  呼吸上传URL: {self.breath_upload_url}")
-        print(f"  上传间隔: {self.upload_interval} 秒")
+        print(f"  心/呼吸上传间隔: {self.hb_upload_interval} 秒")
+        if self.action_upload_url:
+            print(f"  行为上传URL: {self.action_upload_url}")
+            print(f"  行为上传模式: {self.action_upload_mode} | 间隔: {self.action_upload_interval} 秒")
         
         last_print_time = time.time()
-        last_upload_time = time.time()
+        last_hb_upload_time = time.time()
+        last_action_upload_time = time.time()
         print_interval = 1.0  # 每秒打印一次
         
         try:
@@ -251,11 +290,17 @@ class ResultMonitor:
                     # self._print_status()
                     last_print_time = current_time
                 
-                # 定期上传数据
-                if current_time - last_upload_time >= self.upload_interval:
+                # 定期上传 心率/呼吸 数据
+                if current_time - last_hb_upload_time >= self.hb_upload_interval:
                     self._upload_heart_data()
                     self._upload_breath_data()
-                    last_upload_time = current_time
+                    last_hb_upload_time = current_time
+
+                # 行为定时上传模式
+                if self.action_upload_url and self.action_upload_mode == "interval":
+                    if current_time - last_action_upload_time >= self.action_upload_interval:
+                        self._upload_action_data()
+                        last_action_upload_time = current_time
                 
                 # 短暂休眠避免CPU占用过高
                 time.sleep(0.1)
@@ -267,6 +312,8 @@ class ResultMonitor:
             print("\n正在上传剩余数据...")
             self._upload_heart_data()
             self._upload_breath_data()
+            if self.action_upload_url:
+                self._upload_action_data()
             print("结果监控器已停止")
     
     def start(self) -> threading.Thread:
@@ -279,3 +326,34 @@ class ResultMonitor:
         thread = threading.Thread(target=self.run, daemon=True)
         thread.start()
         return thread
+
+    def _upload_action_data(self):
+        """上传行为数据到服务器（异步发送，不等待响应）"""
+        if not self.action_upload_url or len(self.action_data_cache) == 0:
+            return
+
+        upload_data = {
+            "deviceState": "on_body",
+            "data": self.action_data_cache.copy()
+        }
+        count = len(self.action_data_cache)
+
+        def send_request():
+            try:
+                print(f"\n[行为发送] 数据: {upload_data}")
+                headers = {"X-Device-Id": "9ae374d4-f3a4-4896-aa0d-7ce2044163f0"}
+                response = requests.post(
+                    self.action_upload_url,
+                    json=upload_data,
+                    headers=headers,
+                    timeout=5
+                )
+                print(f"[行为响应] 状态码: {response.status_code}, 内容: {response.text}")
+            except Exception as e:
+                print(f"\n[行为异常] {str(e)}")
+
+        threading.Thread(target=send_request, daemon=True).start()
+
+        # 清空缓存并更新计数
+        self.action_data_cache.clear()
+        self.action_upload_count += count
