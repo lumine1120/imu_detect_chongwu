@@ -70,7 +70,27 @@ class ResultMonitor:
         
     def _read_queues(self):
         """从队列读取数据并缓存到本地"""
-        # 读取心率队列
+        # ===== 先读取行为检测队列，确保latest_action是最新的 =====
+        # 状态值: 0=未知, 1=静止, 2=行走, 3=跑步
+        if self.action_queue:
+            try:
+                while not self.action_queue.empty():
+                    action_data = self.action_queue.get_nowait()
+                    if action_data and isinstance(action_data, dict):
+                        action = action_data.get("action")
+                        timestamp = action_data.get("timestamp")
+                        if action is not None:
+                            # 更新最新值并打印
+                            self.latest_action = action
+                            self.latest_action_timestamp = timestamp
+                            self.action_count += 1
+                            # 立即打印行为变化（转换为可读文本）
+                            action_text = {0: "未知", 1: "静止", 2: "行走", 3: "跑步"}.get(action, "未知")
+                            print(f"\n[行为检测] 时间: {timestamp} | 行为: {action_text} ({action})")
+            except queue.Empty:
+                pass
+        
+        # ===== 读取心率队列 =====
         try:
             while not self.heart_rate_queue.empty():
                 heart_data = self.heart_rate_queue.get_nowait()
@@ -86,6 +106,8 @@ class ResultMonitor:
                         # 根据当前行为状态设置置信度：静止(1)时为1.0，其他状态为0.0
                         # 状态值: 0=未知, 1=静止, 2=行走, 3=跑步
                         confidence = 1.0 if self.latest_action == 1 else 0.0
+                        action_text = {0: "未知", 1: "静止", 2: "行走", 3: "跑步"}.get(self.latest_action, "未知") if self.latest_action is not None else "未知"
+                        # print(f"[心率] {heart_value} bpm | 行为: {action_text} | 置信度: {confidence}")
                         
                         # 添加到缓存（用于上传），timestamp转换为毫秒时间戳
                         upload_heart_data = {
@@ -98,7 +120,7 @@ class ResultMonitor:
         except queue.Empty:
             pass
         
-        # 读取呼吸率队列
+        # ===== 读取呼吸率队列 =====
         try:
             while not self.breath_rate_queue.empty():
                 breath_data = self.breath_rate_queue.get_nowait()
@@ -125,26 +147,6 @@ class ResultMonitor:
                         self.breath_data_cache.append(upload_breath_data)
         except queue.Empty:
             pass
-        
-        # 读取行为检测队列
-        # 状态值: 0=未知, 1=静止, 2=行走, 3=跑步
-        if self.action_queue:
-            try:
-                while not self.action_queue.empty():
-                    action_data = self.action_queue.get_nowait()
-                    if action_data and isinstance(action_data, dict):
-                        action = action_data.get("action")
-                        timestamp = action_data.get("timestamp")
-                        if action is not None:
-                            # 更新最新值并打印
-                            self.latest_action = action
-                            self.latest_action_timestamp = timestamp
-                            self.action_count += 1
-                            # 立即打印行为变化（转换为可读文本）
-                            action_text = {0: "未知", 1: "静止", 2: "行走", 3: "跑步"}.get(action, "未知")
-                            print(f"\n[行为检测] 时间: {timestamp} | 行为: {action_text} ({action})")
-            except queue.Empty:
-                pass
     
     def _print_status(self):
         """打印当前状态"""

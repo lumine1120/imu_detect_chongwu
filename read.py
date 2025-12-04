@@ -425,12 +425,14 @@ class DataReader:
 
     def _clear_queues(self):
         """清空所有专用队列"""
-        for q in [self.data_queue_detect, self.data_queue_plot]:
-            while not q.empty():
-                try:
-                    q.get_nowait()
-                except:
-                    break
+        for q in [self.data_queue_detect, self.data_queue_plot, self.data_queue_heart, 
+                  self.data_queue_breath, self.data_queue_action]:
+            if q is not None:  # 检查队列是否为None
+                while not q.empty():
+                    try:
+                        q.get_nowait()
+                    except:
+                        break
 
 
 if __name__ == "__main__":

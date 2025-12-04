@@ -158,10 +158,12 @@ def run_breath_detector(source_type: str, logging: bool = True, sample_rate: int
 
 def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: int = 100):
     """
-    同时检测心率和呼吸：
+    同时检测心率和呼吸，并使用双图可视化：
     - 心率: 基于总加速度 (使用 HeartRateDetector)
-    - 呼吸: 基于角度X (使用 BreathDetector)
-    - 实时绘制呼吸图表
+    - 呼吸: 基于角度X (使用 BreathDetectorNoPlot，仅计算不绘图)
+    - 使用 BreathHeartVisualizer 实时绘制原始波形双图
+      * 上图: AngX 呼吸波形（带峰谷标记）
+      * 下图: 加速度总量心率波形
     - 将检测结果推送到队列并打印
     
     参数:
@@ -169,6 +171,8 @@ def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: i
         logging: 是否记录数据日志
         sample_rate: 采样率
     """
+    from breath_heart_visualizer import BreathHeartVisualizer
+    
     # 选择参数
     if source_type == 'csv':
         source_param = CSV_FILE
@@ -187,6 +191,10 @@ def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: i
     heart_rate_queue = queue.Queue(maxsize=1000)
     breath_rate_queue = queue.Queue(maxsize=1000)
     action_queue = queue.Queue(maxsize=1000)
+    
+    # 新增：原始数据队列（用于可视化）
+    breath_data_queue = queue.Queue(maxsize=2000)
+    heart_data_queue = queue.Queue(maxsize=2000)
 
     # 创建数据读取器
     if source_type == 'recv':
@@ -201,21 +209,24 @@ def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: i
         data_queue=data_reader.get_data_queue_heart(),
         stop_event=data_reader.stop_event,
         sample_rate=sample_rate,
-        heart_rate_queue=heart_rate_queue
+        heart_rate_queue=heart_rate_queue,
+        heart_data_queue=heart_data_queue  # 转发原始数据到可视化
     )
     heart_thread = heart_detector.start()
 
-    # 创建呼吸检测器 (主线程运行并绘图，使用独立的呼吸队列)
-    breath_detector = BreathDetector(
+    # 创建呼吸检测器 (后台线程运行，仅计算不绘图)
+    from breath_detector_no_plot import BreathDetectorNoPlot
+    breath_detector = BreathDetectorNoPlot(
         data_queue=data_reader.get_data_queue_breath(),
         stop_event=data_reader.stop_event,
         sample_rate=sample_rate,
-        max_points=500,
         smooth_window=50,
         slope_window=10,
         peak_search_radius=60,
         breath_rate_queue=breath_rate_queue,
+        breath_data_queue=breath_data_queue,  # 推送原始数据和峰谷点
     )
+    breath_thread = breath_detector.start()
 
     # 创建行为检测器 (后台线程运行，使用加速度数据)
     action_detector = ActionDetector(
@@ -229,7 +240,7 @@ def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: i
     )
     action_thread = action_detector.start()
 
-    # 创建结果监控器（带网络上传功能）行为检测）
+    # 创建结果监控器（带网络上传功能）
     result_monitor = ResultMonitor(
         heart_rate_queue=heart_rate_queue,
         breath_rate_queue=breath_rate_queue,
@@ -251,13 +262,26 @@ def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: i
         )
         logger_thread = data_logger.start()
 
+    # 创建双图可视化器 (主线程运行并绘图，显示原始波形)
+    visualizer = BreathHeartVisualizer(
+        breath_data_queue=breath_data_queue,
+        heart_data_queue=heart_data_queue,
+        breath_rate_queue=breath_rate_queue,
+        heart_rate_queue=heart_rate_queue,
+        action_queue=action_queue,
+        stop_event=data_reader.stop_event,
+        max_points=1000,
+        sample_rate=sample_rate,
+    )
+
     try:
-        breath_detector.start()  # 阻塞直到窗口关闭或被中断
+        visualizer.start()  # 阻塞直到窗口关闭或被中断
     except KeyboardInterrupt:
         print("\n用户中断程序")
     finally:
         data_reader.stop()
         heart_thread.join()
+        breath_thread.join()
         action_thread.join()
         monitor_thread.join()
         if logger_thread:

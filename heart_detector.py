@@ -11,7 +11,7 @@ import time
 
 
 class HeartRateDetector:
-    def __init__(self, data_queue, stop_event, sample_rate=100, window_size=10, heart_rate_queue=None):
+    def __init__(self, data_queue, stop_event, sample_rate=100, window_size=10, heart_rate_queue=None, heart_data_queue=None):
         """
         初始化心率检测器
         
@@ -21,6 +21,7 @@ class HeartRateDetector:
             sample_rate: 采样率(Hz)，默认100
             window_size: 计算心率的时间窗口(秒)，默认10秒
             heart_rate_queue: 心率结果队列(可选)
+            heart_data_queue: 心率原始数据队列(可选，用于可视化)
         """
         self.data_queue = data_queue
         self.stop_event = stop_event
@@ -28,6 +29,7 @@ class HeartRateDetector:
         self.window_size = window_size
         self.last_print_time = time.time()
         self.heart_rate_queue = heart_rate_queue
+        self.heart_data_queue = heart_data_queue  # 用于转发原始数据到可视化
         # self.plot_queue=plot_queue
         # 缓存数据用于峰值检测
         self.buffer_size = sample_rate * window_size
@@ -233,6 +235,17 @@ class HeartRateDetector:
             try:
                 # 从队列获取数据
                 data = self.data_queue.get(timeout=0.1)
+                
+                # 转发原始数据到可视化队列（如果存在）
+                if self.heart_data_queue is not None:
+                    try:
+                        self.heart_data_queue.put_nowait(data)
+                    except queue.Full:
+                        try:
+                            self.heart_data_queue.get_nowait()
+                            self.heart_data_queue.put_nowait(data)
+                        except:
+                            pass
                 
                 # 计算加速度幅值
                 magnitude = self.calculate_magnitude(
