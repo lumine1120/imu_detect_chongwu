@@ -154,7 +154,7 @@ class DataPlotter:
                 if len(self.acc_magnitude) > 0:
                     y_min = min(self.acc_magnitude)
                     y_max = max(self.acc_magnitude)
-                    y_margin = (y_max - y_min) * 0.1 if y_max > y_min else 0.1
+                    y_margin = (y_max - y_min) * 0.125 if y_max > y_min else 0.1
                     self.ax_acc.set_ylim(y_min - y_margin, y_max + y_margin)
             elif self.model in [2,3,4]:
                 ang_series = {2: self.angX_data, 3: self.angY_data, 4: self.angZ_data}[self.model]
@@ -166,12 +166,12 @@ class DataPlotter:
                 if len(self.acc_magnitude) > 0:
                     y_min = min(self.acc_magnitude)
                     y_max = max(self.acc_magnitude)
-                    y_margin = (y_max - y_min) * 0.1 if y_max > y_min else 0.1
+                    y_margin = (y_max - y_min) * 0.125 if y_max > y_min else 0.1
                     self.ax_acc.set_ylim(y_min - y_margin, y_max + y_margin)
                 if len(ang_series) > 0:
                     ay_min = min(ang_series)
                     ay_max = max(ang_series)
-                    ay_margin = (ay_max - ay_min) * 0.1 if ay_max > ay_min else 1.0
+                    ay_margin = (ay_max - ay_min) * 0.125 if ay_max > ay_min else 1.0
                     self.ax_ang.set_ylim(ay_min - ay_margin, ay_max + ay_margin)
             elif self.model == 5:
                 self.line_acc.set_data(list(self.time_data), list(self.acc_magnitude))
@@ -185,14 +185,14 @@ class DataPlotter:
                 if len(self.acc_magnitude) > 0:
                     y_min = min(self.acc_magnitude)
                     y_max = max(self.acc_magnitude)
-                    y_margin = (y_max - y_min) * 0.1 if y_max > y_min else 0.1
+                    y_margin = (y_max - y_min) * 0.125 if y_max > y_min else 0.1
                     self.ax_acc.set_ylim(y_min - y_margin, y_max + y_margin)
                 # Each angle axis range
                 for series, ax in [(self.angX_data, self.ax_angX), (self.angY_data, self.ax_angY), (self.angZ_data, self.ax_angZ)]:
                     if len(series) > 0:
                         ay_min = min(series)
                         ay_max = max(series)
-                        ay_margin = (ay_max - ay_min) * 0.1 if ay_max > ay_min else 1.0
+                        ay_margin = (ay_max - ay_min) * 0.125 if ay_max > ay_min else 1.0
                         ax.set_ylim(ay_min - ay_margin, ay_max + ay_margin)
 
             # 时间与统计文本

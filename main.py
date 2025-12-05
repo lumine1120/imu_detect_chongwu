@@ -11,7 +11,7 @@ import queue
 import threading
 
 # 各来源的参数常量
-CSV_FILE = r"/Users/lumine/code/chongwu/呼吸算法开发/data/imu_log_20251128_152724_test.csv"
+CSV_FILE = r"/Users/lumine/Nutstore Files/我的坚果云/chongwu/tcp/呼吸算法开发/data/imu_log_20251205_152226紧的呼吸急促.csv"
 CSV_FILE_ALT = r"/Users/lumine/code/chongwu/呼吸算法开发/data/imu_log_20251128_152724_test.csv"  # 可切换备用
 BLE_ADDRESS = 'FA:8B:D4:D0:45:04'
 RECV_PARAM = 'BACC'
@@ -295,5 +295,5 @@ if __name__ == "__main__":
     # 示例调用：使用 BreathDetector（CSV 回放，不记录日志）
     # run_breath_detector(source_type='csv', logging=True, sample_rate=100)
     # 示例调用：同时检测心率和呼吸
-    run_both_heart_breath(source_type='tcp', logging=True, sample_rate=100)
+    run_both_heart_breath(source_type='csv', logging=True, sample_rate=100)
 

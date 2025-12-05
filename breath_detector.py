@@ -248,7 +248,7 @@ class BreathDetector:
         self.ax.set_xlim(x_min, x_max)
         if y:
             ymin, ymax = min(y), max(y)
-            margin = (ymax - ymin) * 0.1 if ymax > ymin else 1.0
+            margin = (ymax - ymin) * 0.125 if ymax > ymin else 1.0
             self.ax.set_ylim(ymin - margin, ymax + margin)
 
         # 更新峰谷散点：仅绘制当前显示范围内的点

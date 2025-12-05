@@ -235,7 +235,9 @@ class BreathHeartVisualizer:
             if y_data:
                 y_min = min(y_data)
                 y_max = max(y_data)
-                margin = max(1.0, (y_max - y_min) * 0.15)  # 至少1度的边距
+                data_range = y_max - y_min
+                # 让数据占据80%空间，上下各留10%边距
+                margin = max(0.5, data_range * 0.125)  # 最小边距0.5度
                 self.ax_breath.set_ylim(y_min - margin, y_max + margin)
             
             # 更新峰谷散点（只显示当前窗口内的）
@@ -289,7 +291,9 @@ class BreathHeartVisualizer:
             if y_data:
                 y_min = min(y_data)
                 y_max = max(y_data)
-                margin = max(0.2, (y_max - y_min) * 0.15)  # 至少0.2的边距
+                data_range = y_max - y_min
+                # 让数据占据80%空间，上下各留10%边距
+                margin = max(0.01, data_range * 0.125)  # 最小边距0.01
                 self.ax_heart.set_ylim(max(0, y_min - margin), y_max + margin)
             
             # 计算统计信息
