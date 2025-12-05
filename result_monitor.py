@@ -109,7 +109,7 @@ class ResultMonitor:
                         # 添加到缓存（用于上传），timestamp转换为毫秒时间戳
                         upload_heart_data = {
                             "value": heart_value,
-                            "timestamp": timestamp,
+                            "timestamp": str(timestamp) if timestamp is not None else None,
                             "source": "imu",
                             "confidence": confidence
                         }
@@ -137,7 +137,7 @@ class ResultMonitor:
                         # 添加到缓存（用于上传），timestamp转换为毫秒时间戳
                         upload_breath_data = {
                             "value": breath_value,
-                            "timestamp": timestamp,
+                            "timestamp": str(timestamp) if timestamp is not None else None,
                             "source": "imu",
                             "confidence": confidence
                         }
@@ -330,7 +330,7 @@ class ResultMonitor:
             "deviceState": "on_body",
             "data": [{
                 "value": int(action),
-                "timestamp": timestamp,
+                "timestamp": str(timestamp) if timestamp is not None else None,
                 "source": "imu",
                 "confidence": 1.0
             }]
@@ -370,7 +370,7 @@ class ResultMonitor:
             "deviceState": "on_body",
             "data": [{
                 "value": int(self.latest_action),
-                "timestamp": self.latest_action_timestamp or int(time.time() * 1000),
+                "timestamp": str(self.latest_action_timestamp or int(time.time() * 1000)),
                 "source": "imu",
                 "confidence": 1.0
             }]

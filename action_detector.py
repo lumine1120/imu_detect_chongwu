@@ -37,7 +37,7 @@ class ActionDetector:
         stationary_threshold: tuple = (0.8, 1.2),
         walking_threshold: tuple = (0.5, 2.0),
         running_threshold: float = 2.0,
-        confirm_frames: int = 10
+        confirm_frames: int = 50
     ):
         """
         初始化行为检测器

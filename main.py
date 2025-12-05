@@ -11,7 +11,7 @@ import queue
 import threading
 
 # 各来源的参数常量
-CSV_FILE = r"/Users/lumine/Nutstore Files/我的坚果云/chongwu/tcp/呼吸算法开发/data/labuladuo.csv"
+CSV_FILE = r"/Users/lumine/Nutstore Files/我的坚果云/chongwu/tcp/呼吸算法开发/data/imu_log_20251205_151059 松的_完美.csv"
 CSV_FILE_ALT = r"/Users/lumine/code/chongwu/呼吸算法开发/data/imu_log_20251128_152724_test.csv"  # 可切换备用
 BLE_ADDRESS = 'FA:8B:D4:D0:45:04'
 RECV_PARAM = 'BACC'
@@ -214,7 +214,7 @@ def run_both_heart_breath(source_type: str, logging: bool = True, sample_rate: i
         stop_event=data_reader.stop_event,
         sample_rate=sample_rate,
         max_points=500,
-        smooth_window=50,
+        smooth_window=20,
         slope_window=10,
         peak_search_radius=60,
         breath_rate_queue=breath_rate_queue,
