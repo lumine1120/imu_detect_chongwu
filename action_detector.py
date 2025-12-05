@@ -117,7 +117,7 @@ class ActionDetector:
         # 否则判断为行走
         return self.STATE_WALKING
     
-    def _push_action_result(self, action: str, timestamp: str = None):
+    def _push_action_result(self, action: int, timestamp: int = None):
         """
         将行为检测结果推送到队列
         
@@ -128,11 +128,12 @@ class ActionDetector:
         if self.action_queue is None:
             return
         
+        # 使用毫秒级时间戳（如 1764903544809）
         if timestamp is None:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = int(time.time() * 1000)
         
         action_data = {
-            "action": action,
+            "value": action,
             "timestamp": timestamp
         }
         

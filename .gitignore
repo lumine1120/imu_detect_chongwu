@@ -1,3 +1,63 @@
-data/
-__pycache__/
+# macOS
+.DS_Store
+.AppleDouble
+.apdisk
 
+# VS Code / IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Python cache/compiled
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.conda/
+.env
+.env.*
+.venv/
+venv/
+pythonenv/
+
+# Logs and temp
+*.log
+logs/
+.tmp/
+.temp/
+*.tmp
+
+# Unit test / coverage
+.coverage
+htmlcov/
+.cache/
+pytest_cache/
+.tox/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Project-specific temporary folders
+临时代码/
+录长时间数据/__pycache__/
+
+# Results/output
+result/
+
+# Data files that are large or generated
+# If some CSVs are source data you want tracked, remove or narrow these rules.
+data/*.csv
+!data/说明.txt
+
+# OS trash
+.Trashes
+
+data/

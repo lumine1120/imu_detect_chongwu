@@ -52,7 +52,7 @@ class BreathDetector:
         self.valley_points: List[Tuple[int, float, float]] = []
 
         # 呼吸率（通过 valley->valley 计算，更稳健）
-        self.breath_intervals: Deque[float] = deque(maxlen=10)
+        self.breath_bpm_list: Deque[float] = deque(maxlen=10)
         self.latest_bpm: float = 0.0
 
         # 绘图相关
@@ -157,23 +157,50 @@ class BreathDetector:
                     t2 = self.valley_points[-1][1]
                     dt = max(1e-6, t2 - t1)
                     bpm = 60.0 / dt
-                    self.breath_intervals.append(dt)
-                    # 取最近2次平均
-                    vals = list(self.breath_intervals)[-2:]
-                    self.latest_bpm = int(round(np.mean([60.0 / max(1e-6, v) for v in vals])))
-                    # 推送呼吸率到队列（带时间戳，毫秒级）
-                    # 只有呼吸率在6-200之间才加入队列
-                    if self.breath_rate_queue is not None and 6 <= self.latest_bpm <= 200:
-                        try:
-                            timestamp_ms = int(time.time() * 1000)
-                            breath_data = {
-                                "breath_value": self.latest_bpm,
-                                "timestamp": timestamp_ms
-                            }
-                            self.breath_rate_queue.put_nowait(breath_data)
-                        except queue.Full:
-                            pass
 
+                    # 计算两个波谷间的幅值
+                    idx1 = self.valley_points[-2][0]
+                    idx2 = self.valley_points[-1][0]
+                    base_idx = max(0, self.data_count - len(self.angx))
+                    r1 = idx1 - base_idx
+                    r2 = idx2 - base_idx
+                    
+                    
+                    if 0 <= r1 < len(angx_list) and 0 <= r2 < len(angx_list) and r1 < r2:
+                        seg = angx_list[r1:r2+1]
+                        if seg:
+                            self.latest_amplitude = max(seg) - min(seg)
+                            if self.latest_amplitude < 0.3 or self.latest_amplitude> 3:
+                                return None
+                                pass
+
+                    # 过滤无效 BPM (5-80)
+                    # print(f"bpm: {bpm:.2f}, dt: {dt:.4f}, r1: {r1}, r2: {r2}, seg: {seg}")
+                    if 5 <= bpm <= 80:
+                        self.breath_bpm_list.append(bpm)
+                        print(f"bpm :{bpm}")
+                    
+                        # 取最近5次平均
+                        vals = list(self.breath_bpm_list)[-5:]
+                        print(f"vals: {vals}")
+                        n = len(vals)  # 有效数据的数量，比如n=3
+                        weights = np.arange(1, n + 1, dtype=float)  # 生成[1,2,...,n]的数组，如n=3时→[1.0,2.0,3.0]
+                        weights = weights / np.sum(weights)  # 权重归一化，保证所有权重之和=1
+                        weights_bmp = np.sum(np.array(vals) * weights)
+                        print(f"weights_bmp: {weights_bmp:.2f}")
+                        
+                        if self.breath_rate_queue is not None and weights_bmp is not None:
+                            try:
+                                timestamp_ms = int(time.time() * 1000)
+                                breath_data = {
+                                    "breath_value": weights_bmp,
+                                    "timestamp": timestamp_ms
+                                }
+                                self.breath_rate_queue.put_nowait(breath_data)
+                            except queue.Full:
+                                pass
+                        
+                        self.latest_bpm = weights_bmp
     # ============ 动画与数据循环 ============
     def _update_once(self):
         # 每帧最多取一定数量减少开销

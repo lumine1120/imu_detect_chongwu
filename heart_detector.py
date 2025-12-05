@@ -119,7 +119,7 @@ class HeartRateDetector:
             # 使用自相关算法计算心率
             proc = HeartRateProcessor(self.hr_buffer[-int(self.sample_rate * 5):], sample_rate=self.sample_rate)
             proc.preprocess()
-            proc.calculate_heart_rate(threshold=0.02, sampling_interval=1.0 / self.sample_rate)
+            proc.calculate_heart_rate(threshold=0.08, sampling_interval=1.0 / self.sample_rate)
             
             if proc.status == 'succeeded' and 35 <= proc.current_hr <= 200:
                 current_hr = int(round(proc.current_hr))
