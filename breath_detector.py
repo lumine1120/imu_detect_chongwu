@@ -338,7 +338,7 @@ class BreathDetector:
             self.fig,
             lambda frame: self._update_once(),
             interval=self.update_interval_ms,
-            blit=True,
+            blit=False,
             cache_frame_data=False,
         )
         plt.tight_layout()

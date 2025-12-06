@@ -11,7 +11,7 @@ import queue
 import threading
 
 # 各来源的参数常量
-CSV_FILE = r"/Users/lumine/Nutstore Files/我的坚果云/chongwu/tcp/呼吸算法开发/data/imu_log_20251205_151059 松的_完美.csv"
+CSV_FILE = r"/Users/lumine/Nutstore Files/我的坚果云/chongwu/tcp/呼吸算法开发/data/imu_log_20251205_152226紧的呼吸急促.csv"
 CSV_FILE_ALT = r"/Users/lumine/code/chongwu/呼吸算法开发/data/imu_log_20251128_152724_test.csv"  # 可切换备用
 BLE_ADDRESS = 'FA:8B:D4:D0:45:04'
 RECV_PARAM = 'BACC'
@@ -21,11 +21,11 @@ TCP_PARAM = '0.0.0.0:1122'  # 或端口 '9000'
 
 
 HEART_UPLOAD_URL = "https://api.qyrix.3drx.top/upload/stats/heartrate"
-BREATH_UPLOAD_URL = "https://api.qyrix.3drx.top/upload/stats/breath"
-ACTION_UPLOAD_URL = "https://api.qyrix.3drx.top/upload/stats/action"
+BREATH_UPLOAD_URL = "https://api.qyrix.3drx.top/upload/stats/breathrate"
+ACTION_UPLOAD_URL = "https://api.qyrix.3drx.top/upload/stats/behavior"
 # HEART_UPLOAD_URL = "http://10.29.176.68:8787/upload/stats/heartrate"
-# BREATH_UPLOAD_URL = "http://10.29.176.68:8787/upload/stats/breath"
-# ACTION_UPLOAD_URL = "http://10.29.176.68:8787/upload/stats/action"
+# BREATH_UPLOAD_URL = "http://10.29.176.68:8787/upload/stats/breathrate"
+# ACTION_UPLOAD_URL = "http://10.29.176.68:8787/upload/stats/behavior"
 UPLOAD_INTERVAL = 5  # 上传间隔（秒）
 
 def run(source_type: str, plt_model: int, logging: bool=True ,sample_rate: int=100):
@@ -275,5 +275,5 @@ if __name__ == "__main__":
     # 示例调用：使用 BreathDetector（CSV 回放，不记录日志）
     # run_breath_detector(source_type='csv', logging=True, sample_rate=100)
     # 示例调用：同时检测心率和呼吸
-    run_both_heart_breath(source_type='csv', logging=True, sample_rate=100)
+    run_both_heart_breath(source_type='tcp', logging=True, sample_rate=100)
 
